@@ -14,11 +14,7 @@ fun Application.configureRouting(
 ) {
     routing {
         // Servir arquivos estáticos do frontend
-        staticResources(
-            "/",
-            basePackage = "static",
-            index = "static/index.html"
-        )
+        staticResources("/", "static")
 
         // Bind das rotas dinâmicas da API
         route("/api") {
