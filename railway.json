@@ -1,0 +1,11 @@
+git add {
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "builder": "NIXPACKS",
+    "buildCommand": "chmod +x gradlew && ./gradlew build -x test"
+  },
+  "deploy": {
+    "startCommand": "java -jar build/libs/confra-ajuda-1.0.0.jar",
+    "restartPolicyType": "ON_FAILURE"
+  }
+}
