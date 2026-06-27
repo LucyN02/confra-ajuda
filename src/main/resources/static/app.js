@@ -2,7 +2,7 @@
 let activeDonationId = null;
 let pollingInterval = null;
 let timerInterval = null;
-const API_BASE = window.location.port === '8080' ? '' : 'http://localhost:8080';
+const API_BASE = window.location.port === '8080' ? '' : 'https://confra-ajuda-production.up.railway.app';
 
 // --- DOM ELEMENTS ---
 const campaignsContainer = document.getElementById('campaigns-container');
