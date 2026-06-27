@@ -5,7 +5,7 @@ import io.ktor.client.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
-import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.*
 import org.slf4j.LoggerFactory
 import java.util.UUID
 
@@ -16,6 +16,20 @@ class ConfraPixService(
     val mockMode: Boolean
 ) {
     private val logger = LoggerFactory.getLogger(ConfraPixService::class.java)
+
+    // Helper robust function to parse the ConfraPixTransaction
+    // It works whether the transaction is inside a wrapper {"transaction": {...}} or directly at the root.
+    private fun parseTransaction(bodyText: String): ConfraPixTransaction {
+        val json = Json { ignoreUnknownKeys = true }
+        val element = json.parseToJsonElement(bodyText)
+        if (element is JsonObject) {
+            val txElement = element["transaction"]
+            if (txElement != null) {
+                return json.decodeFromJsonElement(txElement)
+            }
+        }
+        return json.decodeFromJsonElement(element)
+    }
 
     suspend fun createPixTransaction(
         amount: Double,
@@ -55,8 +69,8 @@ class ConfraPixService(
 
             if (response.status == HttpStatusCode.Created || response.status == HttpStatusCode.OK) {
                 val bodyText = response.bodyAsText()
-                val storeResponse = Json { ignoreUnknownKeys = true }.decodeFromString<ConfraPixStoreResponse>(bodyText)
-                Result.success(storeResponse.transaction)
+                val transaction = parseTransaction(bodyText)
+                Result.success(transaction)
             } else {
                 val errorBody = response.bodyAsText()
                 logger.error("[API] Falha no ConfraPix: ${response.status} - $errorBody")
@@ -70,18 +84,17 @@ class ConfraPixService(
 
     suspend fun getTransactionStatus(uuid: String): Result<ConfraPixTransaction> {
         if (mockMode) {
-            // Em modo simulação, o DonationService gerencia o auto-complete baseado em tempo
             return Result.failure(Exception("Mock mode active - query handled locally"))
         }
 
         return try {
-            val response: HttpResponse = httpClient.get("$apiUrl/transaction-ec/$uuid") {
+            val response: HttpResponse = httpClient.get("$apiUrl/transaction-ec/show/$uuid") {
                 header(HttpHeaders.Authorization, "Bearer $token")
             }
 
             if (response.status == HttpStatusCode.OK) {
                 val bodyText = response.bodyAsText()
-                val transaction = Json { ignoreUnknownKeys = true }.decodeFromString<ConfraPixTransaction>(bodyText)
+                val transaction = parseTransaction(bodyText)
                 Result.success(transaction)
             } else {
                 Result.failure(Exception("Falha na consulta de status real: ${response.status}"))
