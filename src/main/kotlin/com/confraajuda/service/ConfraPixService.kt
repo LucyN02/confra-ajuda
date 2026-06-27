@@ -31,6 +31,48 @@ class ConfraPixService(
         return json.decodeFromJsonElement(element)
     }
 
+    // Helper to find the PIX EMV code from the response.
+    // It searches in multiple possible locations based on ConfraPix/BolePix API variations.
+    private fun extractPixCode(bodyText: String): String? {
+        val json = Json { ignoreUnknownKeys = true }
+        try {
+            val element = json.parseToJsonElement(bodyText)
+            if (element is JsonObject) {
+                // 1. Check "pix" -> "code" (Standard ConfraPix response)
+                val pixObj = element["pix"]
+                if (pixObj is JsonObject) {
+                    val code = pixObj["code"]?.jsonPrimitive?.contentOrNull
+                    if (!code.isNullOrEmpty()) return code
+                }
+                
+                // 2. Check "bankslip" -> "pix_code" (BolePix response)
+                val bankslipObj = element["bankslip"]
+                if (bankslipObj is JsonObject) {
+                    val pixCode = bankslipObj["pix_code"]?.jsonPrimitive?.contentOrNull
+                    if (!pixCode.isNullOrEmpty()) return pixCode
+                }
+
+                // 3. Check "transaction" -> "pix_code"
+                val txObj = element["transaction"]
+                if (txObj is JsonObject) {
+                    val pixCode = txObj["pix_code"]?.jsonPrimitive?.contentOrNull
+                    if (!pixCode.isNullOrEmpty()) return pixCode
+                }
+
+                // 4. Check root level "pix_code"
+                val rootPixCode = element["pix_code"]?.jsonPrimitive?.contentOrNull
+                if (!rootPixCode.isNullOrEmpty()) return rootPixCode
+
+                // 5. Check root level "code"
+                val rootCode = element["code"]?.jsonPrimitive?.contentOrNull
+                if (!rootCode.isNullOrEmpty()) return rootCode
+            }
+        } catch (e: Exception) {
+            logger.error("Erro ao extrair pix_code do JSON", e)
+        }
+        return null
+    }
+
     suspend fun createPixTransaction(
         amount: Double,
         customerName: String,
@@ -70,7 +112,10 @@ class ConfraPixService(
             if (response.status == HttpStatusCode.Created || response.status == HttpStatusCode.OK) {
                 val bodyText = response.bodyAsText()
                 val transaction = parseTransaction(bodyText)
-                Result.success(transaction)
+                val pixCode = extractPixCode(bodyText)
+                val finalTransaction = transaction.copy(pix_code = pixCode)
+                logger.info("[API] Transação Pix criada no ConfraPix. Codigo Pix extraído: ${pixCode != null}")
+                Result.success(finalTransaction)
             } else {
                 val errorBody = response.bodyAsText()
                 logger.error("[API] Falha no ConfraPix: ${response.status} - $errorBody")
@@ -95,7 +140,9 @@ class ConfraPixService(
             if (response.status == HttpStatusCode.OK) {
                 val bodyText = response.bodyAsText()
                 val transaction = parseTransaction(bodyText)
-                Result.success(transaction)
+                val pixCode = extractPixCode(bodyText)
+                val finalTransaction = transaction.copy(pix_code = pixCode)
+                Result.success(finalTransaction)
             } else {
                 Result.failure(Exception("Falha na consulta de status real: ${response.status}"))
             }
